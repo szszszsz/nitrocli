@@ -65,7 +65,11 @@ use std::env;
 use std::ffi;
 use std::io;
 use std::process;
+use std::str;
 
+const NITROCLI_BINARY: &str = "NITROCLI_BINARY";
+const NITROCLI_MODEL: &str = "NITROCLI_MODEL";
+const NITROCLI_VERBOSITY: &str = "NITROCLI_VERBOSITY";
 const NITROCLI_ADMIN_PIN: &str = "NITROCLI_ADMIN_PIN";
 const NITROCLI_USER_PIN: &str = "NITROCLI_USER_PIN";
 const NITROCLI_NEW_ADMIN_PIN: &str = "NITROCLI_NEW_ADMIN_PIN";
@@ -101,6 +105,8 @@ pub struct Context<'io> {
   pub stderr: &'io mut dyn io::Write,
   /// Whether `stdout` is a TTY.
   pub is_tty: bool,
+  /// The content of the `PATH` environment variable.
+  pub path: Option<ffi::OsString>,
   /// The admin PIN, if provided through an environment variable.
   pub admin_pin: Option<ffi::OsString>,
   /// The user PIN, if provided through an environment variable.
@@ -135,6 +141,7 @@ impl<'io> Context<'io> {
       stdout,
       stderr,
       is_tty,
+      path: env::var_os("PATH"),
       admin_pin: env::var_os(NITROCLI_ADMIN_PIN),
       user_pin: env::var_os(NITROCLI_USER_PIN),
       new_admin_pin: env::var_os(NITROCLI_NEW_ADMIN_PIN),

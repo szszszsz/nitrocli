@@ -4,7 +4,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::collections;
+use std::fs;
+use std::io::Write;
 use std::ops;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path;
 
 use super::*;
@@ -265,5 +268,102 @@ fn connect_usb_path_model_wrong_serial(_model: nitrokey::Model) -> anyhow::Resul
       );
     }
   }
+  Ok(())
+}
+
+#[test]
+fn extension() -> anyhow::Result<()> {
+  let ext_dir = tempfile::tempdir()?;
+  {
+    let mut ext = fs::OpenOptions::new()
+      .create(true)
+      .mode(0o755)
+      .write(true)
+      .open(ext_dir.path().join("nitrocli-ext"))?;
+
+    ext.write_all(
+      br#"#!/usr/bin/env python
+print("success")
+"#,
+    )?;
+  }
+
+  let path = ext_dir.path().as_os_str().to_os_string();
+  let out = Nitrocli::new().path(path).handle(&["ext"])?;
+  assert_eq!(out, "success\n");
+  Ok(())
+}
+
+#[test]
+fn extension_failure() -> anyhow::Result<()> {
+  let ext_dir = tempfile::tempdir()?;
+  {
+    let mut ext = fs::OpenOptions::new()
+      .create(true)
+      .mode(0o755)
+      .write(true)
+      .open(ext_dir.path().join("nitrocli-ext"))?;
+
+    ext.write_all(
+      br#"#!/usr/bin/env python
+import sys
+sys.exit(42);
+"#,
+    )?;
+  }
+
+  let path = ext_dir.path().as_os_str().to_os_string();
+  let err = Nitrocli::new().path(path).handle(&["ext"]).unwrap_err();
+
+  let expected = format!(
+    "Extension {} failed with error status 42",
+    ext_dir.path().join("nitrocli-ext").display()
+  );
+  assert_eq!(err.to_string(), expected);
+  Ok(())
+}
+
+#[test_device]
+fn extension_arguments(model: nitrokey::Model) -> anyhow::Result<()> {
+  fn test<F>(model: nitrokey::Model, what: &str, args: &[&str], check: F) -> anyhow::Result<()>
+  where
+    F: FnOnce(&str) -> bool,
+  {
+    let ext_dir = tempfile::tempdir()?;
+    {
+      let mut ext = fs::OpenOptions::new()
+        .create(true)
+        .mode(0o755)
+        .write(true)
+        .open(ext_dir.path().join("nitrocli-ext"))?;
+
+      ext.write_all(include_bytes!("extension_model_test.py"))?;
+    }
+
+    let mut args = args.to_vec();
+    args.append(&mut vec!["ext", what]);
+
+    let path = ext_dir.path().as_os_str().to_os_string();
+    let out = Nitrocli::new().model(model).path(path).handle(&args)?;
+
+    assert!(check(&out), out);
+    Ok(())
+  }
+
+  test(model, "model", &[], |out| {
+    out == model.to_string().to_lowercase() + "\n"
+  })?;
+  test(model, "nitrocli", &[], |out| {
+    path::Path::new(out)
+      .file_stem()
+      .unwrap()
+      .to_str()
+      .unwrap()
+      .trim()
+      .contains("nitrocli")
+  })?;
+  test(model, "verbosity", &[], |out| out == "0\n")?;
+  test(model, "verbosity", &["-v"], |out| out == "1\n")?;
+  test(model, "verbosity", &["-v", "--verbose"], |out| out == "2\n")?;
   Ok(())
 }
