@@ -313,13 +313,22 @@ sys.exit(42);
   }
 
   let path = ext_dir.path().as_os_str().to_os_string();
-  let err = Nitrocli::new().path(path).handle(&["ext"]).unwrap_err();
+  let mut ncli = Nitrocli::new().path(path);
 
-  let expected = format!(
-    "Extension {} failed with error status 42",
-    ext_dir.path().join("nitrocli-ext").display()
-  );
-  assert_eq!(err.to_string(), expected);
+  let err = ncli.handle(&["ext"]).unwrap_err();
+  // The extension is responsible for printing any error messages.
+  // Nitrocli is expected not to mess with them, including adding
+  // additional information.
+  if let Some(crate::DirectExitError(rc)) = err.downcast_ref::<crate::DirectExitError>() {
+    assert_eq!(*rc, 42)
+  } else {
+    panic!("encountered unexpected error: {:#}", err)
+  }
+
+  let (rc, out, err) = ncli.run(&["ext"]);
+  assert_eq!(rc, 42);
+  assert_eq!(out, b"");
+  assert_eq!(err, b"");
   Ok(())
 }
 

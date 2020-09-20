@@ -1185,13 +1185,9 @@ pub fn extension(ctx: &mut Context<'_>, args: Vec<ffi::OsString>) -> anyhow::Res
   if out.status.success() {
     Ok(())
   } else if let Some(rc) = out.status.code() {
-    anyhow::bail!(
-      "Extension {} failed with error status {}",
-      ext_path.display(),
-      rc
-    )
+    Err(anyhow::Error::new(crate::DirectExitError(rc)))
   } else {
-    anyhow::bail!("Extension {} indicated a failure", ext_path.display())
+    Err(anyhow::Error::new(crate::DirectExitError(1)))
   }
 }
 
